@@ -128,6 +128,10 @@
     }
 
     onClick = (item) => {
+      if (this.tid) {
+        clearTimeout(this.tid)
+        this.tid = null
+      }
       this.setState({
         selectedOption: -1,
         filteredOptions: [],
@@ -139,10 +143,19 @@
     }
 
     onBlur = (e) => {
+      if (this.tid) {
+        clearTimeout(this.tid)
+        this.tid = null
+      }
       if (this.state.showOptions) {
-        this.setState({showOptions: false, selectedOption: -1, userInput: ''}, () => {
-          this.props.onChange(null)
-        })
+        this.tid = setTimeout(() => {
+          this.tid = null
+          if (this.state.showOptions) {
+            this.setState({showOptions: false, selectedOption: -1, userInput: ''}, () => {
+              this.props.onChange(null)
+            })
+          }
+        }, 200)
       }
     }
 
@@ -194,7 +207,7 @@
     return <div className="grid-3_sm-1">
       <div className="col">...</div>
       <div className="col">
-        <Autocomplete label="Stuff" options={countries} matchPredicate={identity} optionIdFn={identity}
+        <Autocomplete id="stuff" label="Stuff" options={countries} matchPredicate={identity} optionIdFn={identity}
                       optionLabelFn={identity} onChange={setStuff}
                       placeholder="select some stuff"/>
       </div>
@@ -203,7 +216,8 @@
       </div>
       <div className="col">...</div>
       <div className="col">
-        <Autocomplete label="Partner" options={partners} matchPredicate={i => i.name} optionIdFn={i => i.id}
+        <Autocomplete id="partner" label="Partner" options={partners} matchPredicate={i => i.name}
+                      optionIdFn={i => i.id}
                       optionLabelFn={i => i.name} onChange={setPartner} spellcheck="false"/>
       </div>
       <div className="col">
