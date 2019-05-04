@@ -66,34 +66,56 @@
 <script src="https://unpkg.com/react@16/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="https://unpkg.com/axios-mock-adapter/dist/axios-mock-adapter.min.js"></script>
 <script type="text/babel">
   const countries = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Anguilla", "Antigua &amp; Barbuda", "Argentina", "Armenia", "Aruba", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bermuda", "Bhutan", "Bolivia", "Bosnia &amp; Herzegovina", "Botswana", "Brazil", "British Virgin Islands", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde", "Cayman Islands", "Central Arfrican Republic", "Chad", "Chile", "China", "Colombia", "Congo", "Cook Islands", "Costa Rica", "Cote D Ivoire", "Croatia", "Cuba", "Curacao", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Ethiopia", "Falkland Islands", "Faroe Islands", "Fiji", "Finland", "France", "French Polynesia", "French West Indies", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Gibraltar", "Greece", "Greenland", "Grenada", "Guam", "Guatemala", "Guernsey", "Guinea", "Guinea Bissau", "Guyana", "Haiti", "Honduras", "Hong Kong", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Isle of Man", "Israel", "Italy", "Jamaica", "Japan", "Jersey", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Macau", "Macedonia", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Montserrat", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauro", "Nepal", "Netherlands", "Netherlands Antilles", "New Caledonia", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Puerto Rico", "Qatar", "Reunion", "Romania", "Russia", "Rwanda", "Saint Pierre &amp; Miquelon", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "St Kitts &amp; Nevis", "St Lucia", "St Vincent", "Sudan", "Suriname", "Swaziland", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor L'Este", "Togo", "Tonga", "Trinidad &amp; Tobago", "Tunisia", "Turkey", "Turkmenistan", "Turks &amp; Caicos", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Virgin Islands (US)", "Yemen", "Zambia", "Zimbabwe"]
 
   class Autocomplete extends React.Component {
 
-    constructor(props) {
+    constructor (props) {
       super(props)
-      this.state = {showOptions: false, userInput: '', selectedOption: null, filteredOptions: []}
+      let userInput = ''
+      if (props.value) {
+        userInput = props.optionLabelFn(props.value)
+      }
+      this.state = {showOptions: false, userInput, selectedOption: null, filteredOptions: []}
     }
 
-    onChange = (e) => {
+    componentWillReceiveProps (newProps) {
+      if (newProps.value) {
+        const userInput = this.props.optionLabelFn(newProps.value)
+        this.setState({showOptions: false, userInput, selectedOption: null, filteredOptions: []})
+      }
+    }
+
+    onChange = async (e) => {
       const userInput = e.currentTarget.value
       const userInputLength = userInput.length
 
       const userInputLower = userInput.toLowerCase()
 
       let filteredOptions = []
+      let error = undefined
       if (userInputLength >= 1) {
-        filteredOptions = this.props.options.filter(
+        if (typeof this.props.options == 'function') {
+          try {
+            filteredOptions = await this.props.options(userInput) || []
+          } catch (e) {
+            error = "could not fetch options"
+          }
+        } else {
+          filteredOptions = this.props.options.filter(
             (option) => {
               let s = this.props.matchPredicate(option)
               if (s) {
                 return s.substr(0, userInputLength).toLowerCase() === userInputLower
               }
             }
-        )
+          )
+        }
       }
-      this.setState({showOptions: true, userInput, selectedOption: -1, filteredOptions})
+      this.setState({showOptions: true, userInput, selectedOption: -1, filteredOptions, error})
     }
 
     onKeyDown = (e) => {
@@ -142,7 +164,7 @@
       })
     }
 
-    onBlur = (e) => {
+    onBlur = () => {
       if (this.tid) {
         clearTimeout(this.tid)
         this.tid = null
@@ -151,7 +173,7 @@
         this.tid = setTimeout(() => {
           this.tid = null
           if (this.state.showOptions) {
-            this.setState({showOptions: false, selectedOption: -1, userInput: ''}, () => {
+            this.setState({showOptions: false, selectedOption: -1, userInput: '', error: undefined}, () => {
               this.props.onChange(null)
             })
           }
@@ -159,25 +181,35 @@
       }
     }
 
-    render() {
-      const {showOptions, userInput, selectedOption, filteredOptions} = this.state
+    render () {
+      const {showOptions, userInput, selectedOption, filteredOptions, error} = this.state
       const {id, label, placeholder, optionIdFn, optionLabelFn} = this.props
 
       let options
 
-      if (showOptions && userInput) {
-        if (filteredOptions.length) {
-          options = <ul className="autocomplete-items">{filteredOptions.map((item, index) => {
-            const className = (selectedOption === index ? 'autocomplete-active' : null)
-            return <li key={optionIdFn(item)} className={className}
-                       onClick={() => this.onClick(item)}>{optionLabelFn(item)}</li>
-          })}</ul>
-        } else {
-          options = (
+      if (error) {
+        options = (
+          <div className="autocomplete-no-options">
+            <div>Error: {error}</div>
+          </div>
+        )
+      } else {
+
+
+        if (showOptions && userInput) {
+          if (filteredOptions.length) {
+            options = <ul className="autocomplete-items">{filteredOptions.map((item, index) => {
+              const className = (selectedOption === index ? 'autocomplete-active' : null)
+              return <li key={optionIdFn(item)} className={className}
+                         onClick={() => this.onClick(item)}>{optionLabelFn(item)}</li>
+            })}</ul>
+          } else {
+            options = (
               <div className="autocomplete-no-options">
                 <div>No Option!</div>
               </div>
-          )
+            )
+          }
         }
       }
 
@@ -200,28 +232,68 @@
 
   const partners = [{id: 1, name: "Anton"}, {id: 2, name: "Andorra"}, {id: 3, name: "Bart"}, {id: 4, name: "Batmann"}]
 
+  const api = axios.create()
+
+  const mock = new AxiosMockAdapter(api)
+  mock.onGet(/\/fairs\/_autocomplete\?input=(.*)/).reply(function (config) {
+    let u = /\/fairs\/_autocomplete\?input=(.*)/.exec(config.url)
+
+    let fairs = []
+    if (u[1] === 'bau') {
+      fairs = [
+        {id: 8425, name: 'bauma'},
+        {id: 10239, name: 'Energie- und BauMesse Oberland'},
+        {id: 19821, name: 'BAUFACHTAGE KREFELD'},
+        {id: 20244, name: 'Bauen & Wohnen Dorsten'}
+      ]
+    }
+    if (u[1] === 'pfe') {
+      fairs = [
+        {id: 16592, name: 'PFERD Bern'},
+        {id: 3527, name: 'PFERD Wels'},
+        {id: 13755, name: 'Pferd + Hund Turnier Muehlengeez'},
+      ]
+    }
+    return [200, {fairs}, {'content-type': 'application/json; charset=utf-8'}]
+  })
+
+  const fetchFairs = async (input) => {
+    let res = await api.get("/fairs/_autocomplete?input=" + encodeURIComponent(input))
+    if (res.status === 200) {
+      return res.data.fairs
+    }
+  }
+
   const App = () => {
     const [stuff, setStuff] = React.useState("?")
-    const [partner, setPartner] = React.useState()
+    const [partner, setPartner] = React.useState(partners[1])
+    const [fair, setFair] = React.useState()
 
-    return <div className="grid-3_sm-1">
-      <div className="col">...</div>
+    return <div className="grid-2_sm-1">
       <div className="col">
         <Autocomplete id="stuff" label="Stuff" options={countries} matchPredicate={identity} optionIdFn={identity}
-                      optionLabelFn={identity} onChange={setStuff}
+                      optionLabelFn={identity} value={stuff} onChange={setStuff}
                       placeholder="select some stuff"/>
       </div>
       <div className="col">
         <p>Stuff: {stuff}</p>
+        <button onClick={() => setStuff("schalala")}>update stuff</button>
       </div>
-      <div className="col">...</div>
       <div className="col">
         <Autocomplete id="partner" label="Partner" options={partners} matchPredicate={i => i.name}
                       optionIdFn={i => i.id}
-                      optionLabelFn={i => i.name} onChange={setPartner} spellcheck="false"/>
+                      optionLabelFn={i => i.name} value={partner} onChange={setPartner} spellcheck="false"/>
       </div>
       <div className="col">
         <p>Partner: {JSON.stringify(partner)}</p>
+      </div>
+      <div className="col">
+        <Autocomplete id="fair" label="Fair" options={fetchFairs} matchPredicate={i => i.name}
+                      optionIdFn={i => i.id}
+                      optionLabelFn={i => i.name} value={fair} onChange={setFair} spellcheck="false"/>
+      </div>
+      <div className="col">
+        <p>Fair: {JSON.stringify(fair)}</p>
       </div>
     </div>
   }
